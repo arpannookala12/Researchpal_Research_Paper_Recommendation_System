@@ -1,6 +1,30 @@
 from django.db import models
-from django.contrib.postgres.fields import ArrayField
 import uuid
+import json
+from users.models import User
+
+# Custom JSON field for SQLite compatibility
+class JSONField(models.TextField):
+    """
+    JSONField is a TextField that serializes/deserializes JSON objects.
+    This is a simpler implementation for SQLite compatibility.
+    """
+    def from_db_value(self, value, expression, connection):
+        if value is None:
+            return value
+        return json.loads(value)
+
+    def to_python(self, value):
+        if value is None:
+            return value
+        if isinstance(value, (dict, list)):
+            return value
+        return json.loads(value)
+
+    def get_prep_value(self, value):
+        if value is None:
+            return value
+        return json.dumps(value)
 
 class Paper(models.Model):
     """Model for research papers."""
@@ -8,9 +32,12 @@ class Paper(models.Model):
     id = models.CharField(max_length=50, primary_key=True)
     title = models.CharField(max_length=500)
     abstract = models.TextField()
-    authors = ArrayField(models.CharField(max_length=255), blank=True, default=list)
-    categories = models.CharField(max_length=50)
+    # Replace ArrayField with JSONField for SQLite compatibility
+    authors = JSONField(default=str([]))
+    categories = models.CharField(max_length=100)
     comments = models.TextField(blank=True, null=True)
+    journal_ref = models.CharField(max_length=255, blank=True, null=True)
+    doi = models.CharField(max_length=100, blank=True, null=True)
     update_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -39,6 +66,23 @@ class PaperView(models.Model):
             models.Index(fields=['timestamp']),
         ]
 
+class PaperEmbedding(models.Model):
+    """Model to track paper embeddings in vector database."""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    paper = models.ForeignKey(Paper, on_delete=models.CASCADE, related_name='embeddings')
+    model_name = models.CharField(max_length=100)
+    vector_id = models.CharField(max_length=100)
+    dimensions = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('paper', 'model_name')
+        indexes = [
+            models.Index(fields=['model_name']),
+            models.Index(fields=['vector_id']),
+        ]
+
 class Recommendation(models.Model):
     """Model for storing recommendations."""
     
@@ -54,4 +98,46 @@ class Recommendation(models.Model):
         indexes = [
             models.Index(fields=['similarity_score']),
             models.Index(fields=['recommendation_date']),
+        ]
+
+class UserPaperInteraction(models.Model):
+    """Model for tracking user interactions with papers."""
+    
+    INTERACTION_TYPES = (
+        ('view', 'View'),
+        ('save', 'Save'),
+        ('download', 'Download'),
+        ('like', 'Like'),
+        ('dislike', 'Dislike'),
+    )
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='paper_interactions')
+    paper = models.ForeignKey(Paper, on_delete=models.CASCADE, related_name='user_interactions')
+    interaction_type = models.CharField(max_length=20, choices=INTERACTION_TYPES)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'interaction_type']),
+            models.Index(fields=['paper', 'interaction_type']),
+            models.Index(fields=['timestamp']),
+        ]
+
+class UserSearch(models.Model):
+    """Model for tracking user search queries."""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='searches', null=True, blank=True)
+    query = models.TextField()
+    filters = JSONField(default=dict)  # Using our custom JSONField
+    result_count = models.IntegerField(default=0)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    session_id = models.CharField(max_length=100, blank=True, null=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['session_id']),
+            models.Index(fields=['timestamp']),
         ]

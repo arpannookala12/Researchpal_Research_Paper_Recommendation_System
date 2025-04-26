@@ -1,3 +1,4 @@
+# backend/config/settings.py
 import os
 import dj_database_url
 from pathlib import Path
@@ -22,14 +23,18 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'corsheaders',
     'core',
     'api',
     'recommendation',
+    'users',
+    'rag',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -60,10 +65,16 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 DATABASES = {
     'default': dj_database_url.config(
-        default='sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3'),
+        default='sqlite:///db.sqlite3',  # Fallback to SQLite for development
         conn_max_age=600
     )
 }
+
+# MongoDB connection
+MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/paper_recommendation')
+
+# LanceDB Path
+LANCEDB_PATH = os.environ.get('LANCEDB_PATH', os.path.join(os.path.dirname(BASE_DIR), 'processed_data/lancedb_directory'))
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -94,6 +105,9 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Custom user model
+AUTH_USER_MODEL = 'users.User'
+
 # REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -103,5 +117,5 @@ REST_FRAMEWORK = {
     ],
 }
 
-# LanceDB Path
-LANCEDB_PATH = os.environ.get('LANCEDB_PATH', os.path.join(os.path.dirname(BASE_DIR), 'processed_data/lancedb_directory'))
+# CORS settings
+CORS_ALLOW_ALL_ORIGINS = True  # Only for development
